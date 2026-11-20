@@ -1,8 +1,11 @@
 # Lean Snake
 
-A small canvas game starter using [Lasm](https://github.com/Millillion/lasm).
-`Snake.lean` holds the game scene and rectangle data; `Main.lean` creates the
-browser canvas and renders that scene.
+A canvas implementation of Snake using [Lasm](https://github.com/Millillion/lasm).
+Use the arrow keys to steer, collect food to grow, and avoid the snake's body.
+The board wraps at its edges. Press Enter after winning or losing to restart.
+
+`Snake.lean` contains the game state and transition logic; `Main.lean` handles
+input, animation, and rendering.
 
 ## Run
 
@@ -23,4 +26,5 @@ The browser build is written to `dist/`.
 
 ## Development workflow
 
-See [AGENTS.md](./AGENTS.md) for the verification-driven development process.
+See the [vericoding skill](./.agents/skills/vericoding/SKILL.md) for the
+verification-driven development process.

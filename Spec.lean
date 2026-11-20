@@ -25,11 +25,11 @@ structure Position where
 
 /-!
 The snake's position is the position of its head. Its remaining body
-positions follow in `segments`.
+positions follow in `body`.
 -/
 structure Snake where
   position : Position
-  segments : List Position
+  body : List Position
 
 inductive Direction where
   | left
@@ -45,10 +45,17 @@ inductive PlayerInput where
   | keyDown
   deriving DecidableEq
 
+inductive GamePhase where
+  | playing
+  | won
+  | lost
+  deriving DecidableEq
+
 structure GameState where
   snake : Snake
   food : Position
   direction : Direction
+  phase : GamePhase
 
 structure PlayArea where
   leftEdge : Nat
@@ -56,6 +63,7 @@ structure PlayArea where
   topEdge : Nat
   bottomEdge : Nat
 
+/-- A game step returns its unique successor. -/
 abbrev Step := Option PlayerInput → GameState → GameState
 
 /-
@@ -63,6 +71,25 @@ abbrev Step := Option PlayerInput → GameState → GameState
 
 Add new ones at the bottom.
 -/
+
+def isWithinPlayArea (area : PlayArea) (position : Position) : Prop :=
+  area.leftEdge ≤ position.x ∧
+    position.x ≤ area.rightEdge ∧
+    area.topEdge ≤ position.y ∧
+    position.y ≤ area.bottomEdge
+
+def oppositeDirection (direction : Direction) : Direction :=
+  match direction with
+  | .left => .right
+  | .up => .down
+  | .right => .left
+  | .down => .up
+
+def snakeCollides (snake : Snake) (position : Position) : Prop :=
+  position ∈ snake.body
+
+def gameIsRunning (state : GameState) : Prop :=
+  state.phase = .playing
 
 inductive Reachable (step : Step) (initialState : GameState) : GameState → Prop where
   | initial : Reachable step initialState initialState
@@ -72,7 +99,7 @@ inductive Reachable (step : Step) (initialState : GameState) : GameState → Pro
 
 
 /-!
-### Requirement: Moving in the current direction
+### Moving in the current direction
 On each game step, the snake moves in its current direction unless it is at
 the edge it is moving toward.
 
@@ -98,15 +125,13 @@ def isAtEdge (direction : Direction) (area : PlayArea) (state : GameState) : Pro
 
 def movesInDirectionIfNotAtEdge(step : Step) (area : PlayArea) : Prop :=
   ∀ input state,
-    let nextState := step input state
-    let direction := nextState.direction
-    ¬ isAtEdge direction area state →
-      movesInDirection direction state nextState
-
-
+    gameIsRunning state →
+      let nextState := step input state
+      ¬ isAtEdge nextState.direction area state →
+        movesInDirection nextState.direction state nextState
 
 /-!
-### Requirement: Steering the snake with arrow keys
+### Steering the snake with arrow keys
 An arrow-key input sets the direction to the corresponding direction, unless
 that direction is opposite the snake's current direction.
 
@@ -115,32 +140,27 @@ Example:
 - A snake heading left remains heading left when the right arrow is pressed.
 - No user input leaves the direction unchanged.
 -/
-def oppositeDirection (direction : Direction) : Direction :=
-  match direction with
-  | .left => .right
-  | .up => .down
-  | .right => .left
-  | .down => .up
-
 def arrowInputSetsDirection (step : Step) : Prop :=
   ∀ (input : Option PlayerInput) (state : GameState),
-    let before := state.direction
-    let after := (step input state).direction
-    let requestedDirection :=
-      match input with
-      | none => before
-      | some .keyLeft => .left
-      | some .keyUp => .up
-      | some .keyRight => .right
-      | some .keyDown => .down
-    after =
-      if requestedDirection = oppositeDirection before then
-        before
-      else
-        requestedDirection
+    gameIsRunning state →
+      let nextState := step input state
+      let before := state.direction
+      let after := nextState.direction
+      let requestedDirection :=
+        match input with
+        | none => before
+        | some .keyLeft => .left
+        | some .keyUp => .up
+        | some .keyRight => .right
+        | some .keyDown => .down
+      after =
+        if requestedDirection = oppositeDirection before then
+          before
+        else
+          requestedDirection
 
 /-!
-### Requirement: Wrapping at the play-area edges
+### Wrapping at the play-area edges
 On a game step taken while the snake is at the edge it is heading toward, its
 position reappears at the opposite edge, preserving its other coordinate.
 
@@ -148,104 +168,164 @@ Example:
 - Moving left from the left edge wraps to the right edge.
 -/
 def wrapsAtEdge (step : Step) (area : PlayArea) : Prop :=
-  ∀ (input : Option PlayerInput) (state : GameState),
-    let nextState := step input state
-    let direction := nextState.direction
-    let before := state.snake.position
-    let after := nextState.snake.position
-    isAtEdge direction area state →
-      match direction with
-    | .left =>
-        after.x = area.rightEdge ∧
-          after.y = before.y
-    | .up =>
-        after.y = area.bottomEdge ∧
-          after.x = before.x
-    | .right =>
-        after.x = area.leftEdge ∧
-          after.y = before.y
-    | .down =>
-        after.y = area.topEdge ∧
-          after.x = before.x
+  ∀ input state,
+    gameIsRunning state →
+      let nextState := step input state
+      let direction := nextState.direction
+      let before := state.snake.position
+      let after := nextState.snake.position
+      isAtEdge direction area state →
+        match direction with
+        | .left =>
+            after.x = area.rightEdge ∧
+              after.y = before.y
+        | .up =>
+            after.y = area.bottomEdge ∧
+              after.x = before.x
+        | .right =>
+            after.x = area.leftEdge ∧
+              after.y = before.y
+        | .down =>
+            after.y = area.topEdge ∧
+              after.x = before.x
 
 /-!
-### Requirement: Food is in the play area
+### Food is in the play area
 In any game state, there is food within the play area.
 -/
 def foodIsInPlayArea (state : GameState) (area : PlayArea) : Prop :=
-  let food := state.food
-  area.leftEdge ≤ food.x ∧
-    food.x ≤ area.rightEdge ∧
-    area.topEdge ≤ food.y ∧
-    food.y ≤ area.bottomEdge
+  isWithinPlayArea area state.food
+
 
 /-!
-### Requirement: Food moves when eaten
-If the snake is at the food's position, then the food moves to a new position.
+### Snake is in play area
+The snake's head and body positions must be within the play area.
+-/
+def snakeIsInPlayArea (area : PlayArea) (snake : Snake) : Prop :=
+  isWithinPlayArea area snake.position ∧
+    ∀ position ∈ snake.body,
+      isWithinPlayArea area position
+
+def boardIsFull (area : PlayArea) (snake : Snake) : Prop :=
+  ∀ position, isWithinPlayArea area position →
+    position = snake.position ∨ position ∈ snake.body
+
+/-!
+### Food moves when eaten
+If the snake is at the food's position, the food moves to a new position unless
+the game is won, in which case the food stays in place.
 -/
 def foodIsEaten (before after : GameState) : Prop :=
   after.snake.position = before.food
 
 def foodMovesWhenEaten (step : Step) : Prop :=
   ∀ input state,
-    let nextState := step input state
-    foodIsEaten state nextState →
-      nextState.food ≠ state.food
+    gameIsRunning state →
+      let nextState := step input state
+      foodIsEaten state nextState →
+        if nextState.phase = .won then
+          nextState.food = state.food
+        else
+          nextState.food ≠ state.food
 
 /-!
-### Requirement: Food is never the same position as the snake
+### Food is never the same position as the snake
 -/
 def foodIsNotOnSnake (state : GameState) : Prop :=
-  state.food ≠ state.snake.position ∧
-    state.food ∉ state.snake.segments
+  state.phase = .won ∨
+    (state.food ≠ state.snake.position ∧ state.food ∉ state.snake.body)
 
 /-!
-### Requirement: The snake grows when it eats food
+### The snake grows when it eats food
 When the snake is at the food's position, the snake grows by one segment.
 -/
 def snakeGrowsWhenEating (step : Step) : Prop :=
   ∀ input state,
-    let nextState := step input state
-    foodIsEaten state nextState →
-      nextState.snake.segments.length = state.snake.segments.length + 1
+    gameIsRunning state →
+      let nextState := step input state
+      foodIsEaten state nextState →
+        nextState.snake.body.length = state.snake.body.length + 1
 
 /-!
-### Requirement: The snake dies when it collides with itself
-When the snake's head is at the same position as one of its segments, the game ends.
+### The snake dies when it collides with itself
+When the snake's head moves to the same position as one of its body positions,
+the game is lost.
 -/
-def snakeCollides (before after : GameState) : Prop :=
-  after.snake.position ∈ before.snake.segments
-
-def stepDoesNotChangeOnSelfCollision (step : Step) : Prop :=
+def gameEndsOnSelfCollision (step : Step) : Prop :=
   ∀ input state,
-    let nextState := step input state
-    snakeCollides state nextState →
-      nextState = state
+    gameIsRunning state →
+      let nextState := step input state
+      snakeCollides state.snake nextState.snake.position →
+        nextState.phase = .lost
 
 /-!
-### Requirement: The snake is connected
-The snakes head and its segments must be connected. Each segment must be adjacent to the previous segment.
+### The game is won when the play area is full
+After a safe active step, the game is won exactly when the snake occupies
+every position in the play area. Otherwise, it remains active.
 -/
-def positionsAreHorizontallyAdjacent (left right : Position) : Prop :=
-  left.y = right.y ∧
-    (left.x + 1 = right.x ∨ right.x + 1 = left.x)
+def gameEndsWhenPlayAreaIsFull (step : Step) (area : PlayArea) : Prop :=
+  ∀ input state,
+    gameIsRunning state →
+      let nextState := step input state
+      ¬ snakeCollides state.snake nextState.snake.position →
+        (nextState.phase = .won ↔ boardIsFull area nextState.snake)
+          ∧ nextState.phase ≠ .lost
 
-def positionsAreVerticallyAdjacent (left right : Position) : Prop :=
-  left.x = right.x ∧
-    (left.y + 1 = right.y ∨ right.y + 1 = left.y)
+/-!
+### The game has no step after it ends
+The game stops after it is won or lost.
+-/
+def gameHasNoStepAfterEnd (step : Step) : Prop :=
+  ∀ input state,
+    ¬ gameIsRunning state →
+      step input state = state
 
-def positionsAreAdjacent (left right : Position) : Prop :=
-  positionsAreHorizontallyAdjacent left right ∨
-    positionsAreVerticallyAdjacent left right
+/-!
+### The snake is connected
+The snake's head and consecutive segments must be adjacent on the play area's
+wrapped grid. Positions on opposite edges of the same row or column are adjacent.
+-/
+def positionsAreAdjacent (area : PlayArea) (left right : Position) : Prop :=
+  (left.y = right.y ∧
+    (left.x + 1 = right.x ∨
+      right.x + 1 = left.x ∨
+      (left.x = area.leftEdge ∧ right.x = area.rightEdge) ∨
+      (left.x = area.rightEdge ∧ right.x = area.leftEdge))) ∨
+  (left.x = right.x ∧
+    (left.y + 1 = right.y ∨
+      right.y + 1 = left.y ∨
+      (left.y = area.topEdge ∧ right.y = area.bottomEdge) ∨
+      (left.y = area.bottomEdge ∧ right.y = area.topEdge)))
 
-def segmentsAreConnected (previous : Position) : List Position → Prop
+def segmentsAreConnected (area : PlayArea) (previous : Position) : List Position → Prop
   | [] => True
   | segment :: remaining =>
-      positionsAreAdjacent previous segment ∧
-        segmentsAreConnected segment remaining
+      positionsAreAdjacent area previous segment ∧
+        segmentsAreConnected area segment remaining
 
-def snakeIsConnected (snake : Snake) : Prop :=
-  segmentsAreConnected snake.position snake.segments
+def snakeIsConnected (area : PlayArea) (snake : Snake) : Prop :=
+  segmentsAreConnected area snake.position snake.body
+
+/-!
+### Food changes both coordinates when possible
+When food is eaten and the game is not won, the food moves to a position with
+both a different x and y coordinate if an unoccupied position in the play area
+with both coordinates different is available.
+-/
+def foodChangesBothCoordinatesWhenPossible (step : Step) (area : PlayArea) : Prop :=
+  ∀ input state,
+    gameIsRunning state →
+      let nextState := step input state
+      foodIsEaten state nextState →
+        nextState.phase ≠ .won →
+          (∃ position,
+            isWithinPlayArea area position ∧
+            position ≠ nextState.snake.position ∧
+            position ∉ nextState.snake.body ∧
+            position.x ≠ state.food.x ∧
+            position.y ≠ state.food.y) →
+              nextState.food.x ≠ state.food.x ∧
+                nextState.food.y ≠ state.food.y
 
 /-!
 ### All game requirements
@@ -253,21 +333,27 @@ def snakeIsConnected (snake : Snake) : Prop :=
 def gameStateInvariant (area : PlayArea) (state : GameState) : Prop :=
   foodIsInPlayArea state area ∧
     foodIsNotOnSnake state ∧
-    snakeIsConnected state.snake
+    snakeIsInPlayArea area state.snake ∧
+    (state.phase = .won → boardIsFull area state.snake) ∧
+    snakeIsConnected area state.snake
 
 def gameStepRequirements (step : Step) (area : PlayArea) : Prop :=
   movesInDirectionIfNotAtEdge step area ∧
     arrowInputSetsDirection step ∧
     wrapsAtEdge step area ∧
     foodMovesWhenEaten step ∧
+    foodChangesBothCoordinatesWhenPossible step area ∧
     snakeGrowsWhenEating step ∧
-    stepDoesNotChangeOnSelfCollision step
+    gameEndsOnSelfCollision step ∧
+    gameEndsWhenPlayAreaIsFull step area ∧
+    gameHasNoStepAfterEnd step
 
 def gameRequirements (initialState : GameState) (step : Step)
     (area : PlayArea) : Prop :=
   gameStateInvariant area initialState ∧
-    (∀ input state, gameStateInvariant area state →
-      gameStateInvariant area (step input state)) ∧
+    (∀ input state,
+      gameStateInvariant area state →
+        gameStateInvariant area (step input state)) ∧
     gameStepRequirements step area
 
 def alwaysOnReachableStates (step : Step) (initialState : GameState)
