@@ -1,0 +1,16 @@
+name = "lean_snake"
+version = "0.1.0"
+defaultTargets = ["snake"]
+
+[[lean_lib]]
+name = "Snake"
+
+[[lean_lib]]
+name = "Spec"
+
+[[lean_lib]]
+name = "Proofs"
+
+[[lean_exe]]
+name = "snake"
+root = "Main"
