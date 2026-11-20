@@ -5,7 +5,10 @@ open Spec
 
 def main : IO Unit := do
   let canvas ← createElement "canvas"
-  canvas.setAttributes #[("width", "400"), ("height", "300")]
+  canvas.setAttributes #[
+    ("width", toString Snake.canvasWidthPixels),
+    ("height", toString Snake.canvasHeightPixels)
+  ]
   canvas.setStyles #[("border", "2px solid #333")]
   (← document).body >>= (·.appendChild canvas)
   let context ← canvas.context2d
@@ -19,37 +22,47 @@ def main : IO Unit := do
     let previous ← previousSnake.get
     let moveTime ← lastMoveTime.get
     let progress := min 1.0 ((timestamp - moveTime) / 120.0)
-    let deltaX := current.snake.x.toFloat - previous.x.toFloat
-    let deltaY := current.snake.y.toFloat - previous.y.toFloat
-    let wrappedX := deltaX > 10.0 || deltaX < -10.0
-    let wrappedY := deltaY > 10.0 || deltaY < -10.0
+    let deltaX := current.snake.position.x.toFloat - previous.position.x.toFloat
+    let deltaY := current.snake.position.y.toFloat - previous.position.y.toFloat
+    let wrappedX := deltaX > 1.0 || deltaX < -1.0
+    let wrappedY := deltaY > 1.0 || deltaY < -1.0
     let deltaX := if wrappedX then
         match current.direction with
-        | .left => -10.0
-        | .right => 10.0
+        | .left => -1.0
+        | .right => 1.0
         | _ => deltaX
       else
         deltaX
     let deltaY := if wrappedY then
         match current.direction with
-        | .up => -10.0
-        | .down => 10.0
+        | .up => -1.0
+        | .down => 1.0
         | _ => deltaY
       else
         deltaY
-    let x := previous.x.toFloat + deltaX * progress
-    let y := previous.y.toFloat + deltaY * progress
+    let cellSize := Snake.cellSizePixels.toFloat
+    let x := (previous.position.x.toFloat + deltaX * progress) * cellSize
+    let y := (previous.position.y.toFloat + deltaY * progress) * cellSize
     context.draw #[
-      .clearRect 0 0 400 300,
+      .clearRect 0 0 Snake.canvasWidthPixels.toFloat Snake.canvasHeightPixels.toFloat,
       .fillStyle "green",
-      .fillRect x y 10 10
+      .fillRect x y cellSize cellSize,
+      .fillStyle "red",
+      .fillRect (current.food.x.toFloat * cellSize)
+        (current.food.y.toFloat * cellSize) cellSize cellSize
     ]
     if wrappedX then
-      let offset := if deltaX > 0 then -400.0 else 400.0
-      context.draw #[.fillRect (x + offset) y 10 10]
+      let offset := if deltaX > 0 then
+          -(Snake.canvasWidthPixels.toFloat)
+        else
+          Snake.canvasWidthPixels.toFloat
+      context.draw #[.fillRect (x + offset) y cellSize cellSize]
     if wrappedY then
-      let offset := if deltaY > 0 then -300.0 else 300.0
-      context.draw #[.fillRect x (y + offset) 10 10]
+      let offset := if deltaY > 0 then
+          -(Snake.canvasHeightPixels.toFloat)
+        else
+          Snake.canvasHeightPixels.toFloat
+      context.draw #[.fillRect x (y + offset) cellSize cellSize]
 
   let steer (input : PlayerInput) : IO Unit := do
     state.modify fun current =>
