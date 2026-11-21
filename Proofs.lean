@@ -628,6 +628,7 @@ theorem foodChangesBothCoordinatesWhenPossible :
         Snake.positionAfterMove Snake.playArea direction state.snake.position ∈ state.snake.body :=
       by simpa [direction, intendedPosition] using hCollision
     rw [if_pos hCollisionRaw] at hPossible hNotWon ⊢
+    rw [if_pos hEatingRaw] at hPossible hNotWon ⊢
     cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
     | some food =>
       have hSelected := availableFoodPositionForSnake_spec state.food food snake hAvailable
@@ -644,6 +645,7 @@ theorem foodChangesBothCoordinatesWhenPossible :
         Snake.positionAfterMove Snake.playArea direction state.snake.position ∉ state.snake.body :=
       by simpa [direction, intendedPosition] using hCollision
     rw [if_neg hCollisionRaw] at hPossible hNotWon ⊢
+    rw [if_pos hEatingRaw] at hPossible hNotWon ⊢
     cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
     | some food =>
       have hBoth := availableFoodPosition_changesBoth state.food food snake hAvailable (by
@@ -690,9 +692,19 @@ private theorem gameEndsWhenPlayAreaIsFull :
   rw [if_neg hNotEnded] at hSafe ⊢
   have hCollision : intendedPosition ∉ state.snake.body := by
     simpa [Spec.snakeCollides, direction, intendedPosition, body, snake] using hSafe
-  rw [if_neg hCollision]
+  have hCollisionRaw :
+      Snake.positionAfterMove Snake.playArea
+          (Snake.directionAfterInput input state.direction) state.snake.position ∉
+        state.snake.body := by
+    simpa [direction, intendedPosition] using hCollision
+  rw [if_neg hCollisionRaw]
   by_cases hEating : intendedPosition = state.food
-  · rw [if_pos hEating]
+  · have hEatingRaw :
+        Snake.positionAfterMove Snake.playArea
+            (Snake.directionAfterInput input state.direction) state.snake.position =
+          state.food := by
+      simpa [direction, intendedPosition] using hEating
+    rw [if_pos hEatingRaw]
     cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
     | some food =>
       have hFood := availableFoodPositionForSnake_spec state.food food snake hAvailable

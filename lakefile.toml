@@ -2,6 +2,11 @@ name = "lean_snake"
 version = "0.1.0"
 defaultTargets = ["snake"]
 
+[[require]]
+name = "plausible"
+git = "https://github.com/leanprover-community/plausible"
+rev = "v4.35.0"
+
 [[lean_lib]]
 name = "Snake"
 
@@ -10,6 +15,9 @@ name = "Spec"
 
 [[lean_lib]]
 name = "Proofs"
+
+[[lean_lib]]
+name = "Tests"
 
 [[lean_exe]]
 name = "snake"

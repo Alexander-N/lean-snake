@@ -27,4 +27,6 @@ The browser build is written to `dist/`.
 ## Development workflow
 
 See the [vericoding skill](./.agents/skills/vericoding/SKILL.md) for the
-verification-driven development process.
+verification-driven development process. The reusable
+[Lean property-testing guide](./docs/lean-property-testing.md) describes how to
+use Plausible for cheap counterexample search before formal proof.
