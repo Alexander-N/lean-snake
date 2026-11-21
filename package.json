@@ -1,9 +1,13 @@
 {
   "name": "lean-canvas-square",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "lasm build Main.lean --target browser",
-    "dev": "lasm dev Main.lean --target browser"
+    "dev": "lasm dev Main.lean --target browser",
+    "verify": "lake build Proofs Tests"
   },
   "devDependencies": {
     "@lasm/cli": "^0.3.0"

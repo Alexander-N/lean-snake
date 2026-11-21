@@ -1,5 +1,7 @@
 # Lean Snake
 
+**[Play Lean Snake](https://alexander-n.github.io/lean-snake/)**
+
 [Verification driven implementation](./.agents/skills/vericoding/SKILL.md) of Snake in [Lean](https://lean-lang.org/) using [Lasm](https://github.com/Millillion/lasm).
 
 ## Run
