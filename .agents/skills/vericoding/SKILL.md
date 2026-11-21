@@ -16,7 +16,11 @@ Develop the system one requirement at a time:
 3. **Agent:** Implement the behavior without changing `Spec.lean`. If
    implementation reveals an ambiguity or gap, ask the developer to clarify
    or approve a spec change before proceeding.
-4. **Agent:** Prove in `Proofs.lean` that the concrete implementation satisfies
+4. **Agent:** Load and apply the
+   [Lean property-testing skill](../lean-property-testing/SKILL.md). Before
+   proof, assess every agreed requirement for an executable, sampleable
+   property. If suitable, search for counterexamples first; if not, state why.
+5. **Agent:** Prove in `Proofs.lean` that the concrete implementation satisfies
    the requirement in `Spec.lean`.
 
 The Lean proof verifies the implementation represented by the formal model.

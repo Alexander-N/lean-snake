@@ -1,11 +1,6 @@
 # Lean Snake
 
-A canvas implementation of Snake using [Lasm](https://github.com/Millillion/lasm).
-Use the arrow keys to steer, collect food to grow, and avoid the snake's body.
-The board wraps at its edges. Press Enter after winning or losing to restart.
-
-`Snake.lean` contains the game state and transition logic; `Main.lean` handles
-input, animation, and rendering.
+[Verification driven implementation](./.agents/skills/vericoding/SKILL.md) of Snake in [Lean](https://lean-lang.org/) using [Lasm](https://github.com/Millillion/lasm).
 
 ## Run
 
@@ -23,10 +18,3 @@ npm run build
 ```
 
 The browser build is written to `dist/`.
-
-## Development workflow
-
-See the [vericoding skill](./.agents/skills/vericoding/SKILL.md) for the
-verification-driven development process. The reusable
-[Lean property-testing guide](./docs/lean-property-testing.md) describes how to
-use Plausible for cheap counterexample search before formal proof.
