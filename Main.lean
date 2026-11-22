@@ -12,6 +12,7 @@ def main : IO Unit := do
   canvas.setStyles #[("border", "2px solid #333")]
   (← document).body >>= (·.appendChild canvas)
   let context ← canvas.context2d
+  IO.setRandSeed (← now).toUInt64.toNat
 
   let state ← IO.mkRef Snake.initialState
   let pendingInput ← IO.mkRef (none : Option PlayerInput)
@@ -132,7 +133,12 @@ def main : IO Unit := do
     let current ← state.get
     let input ← pendingInput.get
     pendingInput.set none
-    let nextState := Snake.step input current
+    let numberOfFreePositions := Snake.numberOfFreePositionsForStep input current
+    let random ← if numberOfFreePositions = 0 then
+        pure 0
+      else
+        IO.rand 0 (numberOfFreePositions - 1)
+    let nextState := Snake.step input { current with random := random }
     previousSnake.set current.snake
     state.set nextState
     lastMoveTime.set (← now)

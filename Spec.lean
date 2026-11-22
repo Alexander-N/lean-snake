@@ -56,6 +56,10 @@ structure GameState where
   food : Position
   direction : Direction
   phase : GamePhase
+  /-- A uniformly drawn natural number used to choose the next food position.
+  It is drawn from `0 … n-1`, where `n` is the number of free positions after
+  the snake eats. -/
+  random : Nat
 
 structure PlayArea where
   leftEdge : Nat
@@ -307,25 +311,63 @@ def snakeIsConnected (area : PlayArea) (snake : Snake) : Prop :=
   segmentsAreConnected area snake.position snake.body
 
 /-!
-### Food changes both coordinates when possible
-When food is eaten and the game is not won, the food moves to a position with
-both a different x and y coordinate if an unoccupied position in the play area
-with both coordinates different is available.
+### Food is placed fairly
+When the snake eats food, every free position is equally likely to become the
+next food position.
 -/
-def foodChangesBothCoordinatesWhenPossible (step : Step) (area : PlayArea) : Prop :=
+
+/-- All positions of the play area. -/
+def positionsInPlayArea (area : PlayArea) : List Position :=
+  (List.range (area.bottomEdge - area.topEdge + 1)).flatMap fun y =>
+    (List.range (area.rightEdge - area.leftEdge + 1)).map fun x =>
+      { x := area.leftEdge + x, y := area.topEdge + y }
+
+/-- A position in the play area that the snake does not occupy. -/
+def isFree (area : PlayArea) (snake : Snake) (position : Position) : Prop :=
+  isWithinPlayArea area position ∧
+    position ≠ snake.position ∧
+    position ∉ snake.body
+
+instance (area : PlayArea) (snake : Snake) (position : Position) :
+    Decidable (isFree area snake position) := by
+  unfold isFree isWithinPlayArea
+  infer_instance
+
+def numberOfFreePositions (area : PlayArea) (snake : Snake) : Nat :=
+  ((positionsInPlayArea area).filter fun position =>
+    decide (isFree area snake position)).length
+
+/-- Exactly one number satisfies `property`. -/
+def ExactlyOne (property : Nat → Prop) : Prop :=
+  ∃ number, property number ∧ ∀ other, property other → other = number
+
+/-- The food the step would produce if the random number were `random`. -/
+def nextFoodForRandom (step : Step) (input : Option PlayerInput)
+    (state : GameState) (random : Nat) : Position :=
+  (step input { state with random := random }).food
+
+/-
+With n free positions, the random numbers 0 to n-1 are the possible outcomes.
+The environment draws one of them with equal probability. Each free position
+is the new food for exactly one of these random numbers, so each is equally
+likely. If no position is free the game is won and there is nothing to show.
+-/
+def foodIsPlacedFairly (step : Step) (area : PlayArea) : Prop :=
   ∀ input state,
+    -- for any player input and any running game
     gameIsRunning state →
+      -- look at the state after the step
       let nextState := step input state
+      -- if the snake ate the food in this step
       foodIsEaten state nextState →
-        nextState.phase ≠ .won →
-          (∃ position,
-            isWithinPlayArea area position ∧
-            position ≠ nextState.snake.position ∧
-            position ∉ nextState.snake.body ∧
-            position.x ≠ state.food.x ∧
-            position.y ≠ state.food.y) →
-              nextState.food.x ≠ state.food.x ∧
-                nextState.food.y ≠ state.food.y
+        -- then for every free position
+        ∀ position, isFree area nextState.snake position →
+          -- there is exactly one random number, among the possible ones,
+          ExactlyOne fun random =>
+            random < numberOfFreePositions area nextState.snake ∧
+              -- that puts the next food at that position
+              nextFoodForRandom step input state random = position
+
 
 /-!
 ### All game requirements
@@ -342,7 +384,7 @@ def gameStepRequirements (step : Step) (area : PlayArea) : Prop :=
     arrowInputSetsDirection step ∧
     wrapsAtEdge step area ∧
     foodMovesWhenEaten step ∧
-    foodChangesBothCoordinatesWhenPossible step area ∧
+    foodIsPlacedFairly step area ∧
     snakeGrowsWhenEating step ∧
     gameEndsOnSelfCollision step ∧
     gameEndsWhenPlayAreaIsFull step area ∧

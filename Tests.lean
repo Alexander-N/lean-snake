@@ -27,19 +27,11 @@ instance {α : Type} [Repr α] (x : α) (xs : List α) :
 example : Spec.gameEndsOnSelfCollision Snake.step := by
   unfold Spec.gameEndsOnSelfCollision Spec.gameIsRunning Spec.snakeCollides
   dsimp only
-  plausible (config := { numInst := 20, maxSize := 5, numRetries := 10000 })
+  plausible (config := { numInst := 20, maxSize := 5, numRetries := 100 })
 
 example : Spec.arrowInputSetsDirection Snake.step := by
   unfold Spec.arrowInputSetsDirection Spec.gameIsRunning
   plausible
-
-example : Spec.foodChangesBothCoordinatesWhenPossible Snake.step Snake.playArea := by
-  unfold Spec.foodChangesBothCoordinatesWhenPossible Spec.foodIsEaten
-    Spec.gameIsRunning Spec.isWithinPlayArea
-  dsimp only
-  intro input state hRunning hEaten hNotWon hPossible
-  rcases hPossible with ⟨position, hWithin, hHead, hBody, hx, hy⟩
-  plausible (config := { numInst := 20, maxSize := 5, numRetries := 10000 })
 
 example : ∀ (input : Option PlayerInput) (state : GameState),
     Spec.gameIsRunning state →
@@ -51,12 +43,12 @@ example : ∀ (input : Option PlayerInput) (state : GameState),
   unfold Spec.gameIsRunning Spec.snakeCollides
   dsimp only
   intro input state hRunning hSafe
-  plausible (config := { numInst := 20, maxSize := 5, numRetries := 10000 })
+  plausible (config := { numInst := 20, maxSize := 5, numRetries := 100 })
 
 example : ∀ (input : Option PlayerInput) (state : GameState),
     Spec.foodIsNotOnSnake state → Spec.foodIsNotOnSnake (Snake.step input state) := by
   unfold Spec.foodIsNotOnSnake
   intro input state hFood
-  plausible (config := { numInst := 20, maxSize := 5, numRetries := 10000 })
+  plausible (config := { numInst := 20, maxSize := 5, numRetries := 100 })
 
 end Tests

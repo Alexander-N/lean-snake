@@ -134,63 +134,26 @@ theorem gameStateInvariant_initial :
 
 private theorem position_mem_positionsInPlayArea_early (position : Position)
     (hRight : position.x ≤ 39) (hBottom : position.y ≤ 29) :
-    position ∈ Snake.positionsInPlayArea Snake.playArea := by
-  simp only [Snake.positionsInPlayArea, List.mem_flatMap]
+    position ∈ Spec.positionsInPlayArea Snake.playArea := by
+  simp only [Spec.positionsInPlayArea, List.mem_flatMap]
   refine ⟨position.y, by simp [Snake.playArea]; omega, ?_⟩
   refine List.mem_map.mpr ⟨position.x, by simp [Snake.playArea]; omega, ?_⟩
   simp [Snake.playArea]
 
 private theorem positionsInPlayArea_within (position : Position)
-    (h : position ∈ Snake.positionsInPlayArea Snake.playArea) :
+    (h : position ∈ Spec.positionsInPlayArea Snake.playArea) :
     Spec.isWithinPlayArea Snake.playArea position := by
-  simp only [Snake.positionsInPlayArea, List.mem_flatMap, List.mem_map,
+  simp only [Spec.positionsInPlayArea, List.mem_flatMap, List.mem_map,
     List.mem_range] at h
   rcases h with ⟨y, hy, x, hx, rfl⟩
   simp only [Snake.playArea] at hy hx ⊢
   simp [Spec.isWithinPlayArea]
   omega
 
-private theorem availableFoodPositionForSnake_spec
-    (food position : Position) (snake : Spec.Snake)
-    (h : Snake.availableFoodPositionForSnake Snake.playArea food snake =
-      some position) :
-    Spec.isWithinPlayArea Snake.playArea position ∧
-      position ≠ snake.position ∧ position ∉ snake.body := by
-  unfold Snake.availableFoodPositionForSnake at h
-  let positions := Snake.positionsInPlayArea Snake.playArea
-  change
-    (positions.find? (fun candidate =>
-          Snake.isFreeForSnake candidate snake &&
-            decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) <|>
-        positions.find? (Snake.isFreeForSnake · snake)) = some position at h
-  cases hPreferred :
-      positions.find? (fun candidate =>
-        Snake.isFreeForSnake candidate snake &&
-          decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) with
-  | none =>
-    have hFallback : positions.find? (Snake.isFreeForSnake · snake) = some position := by
-      rw [hPreferred] at h
-      simpa [Option.instOrElse, OrElse.orElse, Option.orElse] using h
-    have hMem := List.mem_of_find?_eq_some hFallback
-    have hPredicate := List.find?_some hFallback
-    have hFree := of_decide_eq_true (by simpa [Snake.isFreeForSnake] using hPredicate)
-    exact ⟨positionsInPlayArea_within position hMem, hFree⟩
-  | some preferred =>
-    have hPosition : preferred = position := by
-      rw [hPreferred] at h
-      simpa [Option.instOrElse, OrElse.orElse, Option.orElse] using h
-    subst position
-    have hMem := List.mem_of_find?_eq_some hPreferred
-    have hPredicate := List.find?_some hPreferred
-    have hFree := of_decide_eq_true
-      ((Bool.and_eq_true _ _).mp hPredicate).1
-    exact ⟨positionsInPlayArea_within preferred hMem,
-      by simpa [Snake.isFreeForSnake] using hFree⟩
-
 private theorem position_mem_positionsInPlayArea (position : Position)
     (hRight : position.x ≤ 39) (hBottom : position.y ≤ 29) :
-    position ∈ Snake.positionsInPlayArea Snake.playArea := by
-  simp only [Snake.positionsInPlayArea, List.mem_flatMap]
+    position ∈ Spec.positionsInPlayArea Snake.playArea := by
+  simp only [Spec.positionsInPlayArea, List.mem_flatMap]
   refine ⟨position.y, ?_, ?_⟩
   · simp [Snake.playArea]
     omega
@@ -199,6 +162,150 @@ private theorem position_mem_positionsInPlayArea (position : Position)
     · simp [Snake.playArea]
       omega
     · simp [Snake.playArea]
+
+private theorem positionsInPlayArea_nodup :
+    (Spec.positionsInPlayArea Snake.playArea).Nodup := by
+  unfold Spec.positionsInPlayArea List.Nodup
+  rw [List.pairwise_flatMap]
+  constructor
+  · intro y hy
+    rw [List.pairwise_map]
+    apply List.Pairwise.imp (R := fun a b => a ≠ b)
+    · intro a b hab hEq
+      apply hab
+      exact Nat.add_left_cancel (congrArg Spec.Position.x hEq)
+    · exact List.nodup_range
+  · apply List.Pairwise.imp (R := fun a b => a ≠ b)
+    · intro y1 y2 hyNe
+      intro position1 hPosition1 position2 hPosition2 hEq
+      apply hyNe
+      simp only [List.mem_map] at hPosition1 hPosition2
+      rcases hPosition1 with ⟨x1, hx1, rfl⟩
+      rcases hPosition2 with ⟨x2, hx2, rfl⟩
+      exact Nat.add_left_cancel (congrArg Spec.Position.y hEq)
+    · exact List.nodup_range
+
+private theorem freeFoodPositions_eq_spec (snake : Spec.Snake) :
+    Snake.freeFoodPositions Snake.playArea snake =
+      (Spec.positionsInPlayArea Snake.playArea).filter fun position =>
+        decide (Spec.isFree Snake.playArea snake position) := by
+  unfold Snake.freeFoodPositions
+  apply List.filter_congr
+  intro position hMember
+  have hWithin := positionsInPlayArea_within position hMember
+  simp [Snake.isFreeForSnake, Spec.isFree, hWithin]
+
+private theorem freeFoodPositions_nodup (snake : Spec.Snake) :
+    (Snake.freeFoodPositions Snake.playArea snake).Nodup := by
+  rw [freeFoodPositions_eq_spec]
+  exact List.Pairwise.filter _ positionsInPlayArea_nodup
+
+private theorem nextFoodPosition_at_index (snake : Spec.Snake) (index : Nat)
+    (hIndex : index < (Snake.freeFoodPositions Snake.playArea snake).length) :
+    Snake.nextFoodPosition Snake.playArea index snake =
+      some (Snake.freeFoodPositions Snake.playArea snake)[index] := by
+  unfold Snake.nextFoodPosition
+  simp [Nat.mod_eq_of_lt hIndex]
+
+private theorem freeFoodPositionIndex (snake : Spec.Snake) (position : Position)
+    (hFree : Spec.isFree Snake.playArea snake position) :
+    Spec.ExactlyOne fun random =>
+      random < Spec.numberOfFreePositions Snake.playArea snake ∧
+        Snake.nextFoodPosition Snake.playArea random snake = some position := by
+  let positions := Snake.freeFoodPositions Snake.playArea snake
+  have hPositionsLength : positions.length =
+      Spec.numberOfFreePositions Snake.playArea snake := by
+    change (Snake.freeFoodPositions Snake.playArea snake).length = _
+    rw [freeFoodPositions_eq_spec]
+    rfl
+  have hMember : position ∈ positions := by
+    change position ∈ Snake.freeFoodPositions Snake.playArea snake
+    rw [freeFoodPositions_eq_spec, List.mem_filter]
+    refine ⟨position_mem_positionsInPlayArea position ?_ ?_, decide_eq_true hFree⟩
+    · simpa [Spec.isWithinPlayArea, Snake.playArea] using hFree.1.2.1
+    · simpa [Spec.isWithinPlayArea, Snake.playArea] using hFree.1.2.2.2
+  rcases List.mem_iff_getElem.mp hMember with ⟨index, hIndex, hAtIndex⟩
+  refine ⟨index, ⟨by simpa [hPositionsLength] using hIndex, ?_⟩, ?_⟩
+  · rw [nextFoodPosition_at_index snake index hIndex]
+    simp [positions, hAtIndex]
+  · intro other hOther
+    have hOtherIndex : other < positions.length := by
+      simpa [hPositionsLength] using hOther.1
+    have hSame := hOther.2
+    rw [nextFoodPosition_at_index snake other hOtherIndex] at hSame
+    simp only [Option.some.injEq] at hSame
+    have hNodup : positions.Nodup := by
+      simpa [positions] using freeFoodPositions_nodup snake
+    exact (hNodup.getElem_inj (hi := hOtherIndex) (hj := hIndex)).mp
+      (hSame.trans hAtIndex.symm)
+
+private theorem nextFoodPosition_spec
+    (random : Nat) (position : Position) (snake : Spec.Snake)
+    (h : Snake.nextFoodPosition Snake.playArea random snake = some position) :
+    Spec.isWithinPlayArea Snake.playArea position ∧
+      position ≠ snake.position ∧ position ∉ snake.body := by
+  unfold Snake.nextFoodPosition at h
+  obtain ⟨hIndex, hPosition⟩ := List.getElem?_eq_some_iff.mp h
+  have hMember : position ∈ Snake.freeFoodPositions Snake.playArea snake := by
+    rw [← hPosition]
+    exact List.getElem_mem hIndex
+  have hFiltered : position ∈
+      (Spec.positionsInPlayArea Snake.playArea).filter
+        (Snake.isFreeForSnake · snake) := by
+    simpa [Snake.freeFoodPositions] using hMember
+  have hFree := List.mem_filter.mp hFiltered
+  have hFreeProp := of_decide_eq_true hFree.2
+  exact ⟨positionsInPlayArea_within position hFree.1,
+    by simpa [Snake.isFreeForSnake] using hFreeProp⟩
+
+private theorem nextFoodPosition_none_iff_full
+    (random : Nat) (snake : Spec.Snake) :
+    Snake.nextFoodPosition Snake.playArea random snake = none ↔
+      Spec.boardIsFull Snake.playArea snake := by
+  unfold Snake.nextFoodPosition Snake.freeFoodPositions Spec.boardIsFull
+  constructor
+  · intro hNone position hWithin
+    have hMem := position_mem_positionsInPlayArea position
+      (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.1)
+      (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.2.2)
+    by_cases hHead : position = snake.position
+    · exact Or.inl hHead
+    by_cases hBody : position ∈ snake.body
+    · exact Or.inr hBody
+    exfalso
+    have hLength : 0 <
+        ((Spec.positionsInPlayArea Snake.playArea).filter
+          (Snake.isFreeForSnake · snake)).length := by
+      exact List.length_pos_iff.mpr (by
+        intro hEmpty
+        have hNotMem : position ∉
+            (Spec.positionsInPlayArea Snake.playArea).filter
+              (Snake.isFreeForSnake · snake) := by
+          simp [hEmpty]
+        apply hNotMem
+        simp [hMem, Snake.isFreeForSnake, hHead, hBody])
+    have hIndex : random %
+        ((Spec.positionsInPlayArea Snake.playArea).filter
+          (Snake.isFreeForSnake · snake)).length <
+        ((Spec.positionsInPlayArea Snake.playArea).filter
+          (Snake.isFreeForSnake · snake)).length :=
+      Nat.mod_lt _ hLength
+    rw [List.getElem?_eq_getElem hIndex] at hNone
+    contradiction
+  · intro hFull
+    have hEmpty :
+        (Spec.positionsInPlayArea Snake.playArea).filter
+          (Snake.isFreeForSnake · snake) = [] := by
+      apply List.eq_nil_iff_forall_not_mem.mpr
+      intro position hMember
+      have hFree := List.mem_filter.mp hMember
+      have hWithin := positionsInPlayArea_within position hFree.1
+      have hFreeProp := of_decide_eq_true hFree.2
+      rcases hFull position hWithin with hHead | hBody
+      · exact hFreeProp.1 hHead
+      · exact hFreeProp.2 hBody
+    rw [hEmpty]
+    rfl
 
 private theorem differentFoodPosition_ne (food : Position) :
     Snake.differentFoodPosition Snake.playArea food ≠ food := by
@@ -218,14 +325,14 @@ private theorem differentFoodPosition_ne (food : Position) :
       simpa [candidate, hFood, origin] using hEq.symm
   have hPositionSome :
       ∃ position,
-        (Snake.positionsInPlayArea Snake.playArea).find?
+        (Spec.positionsInPlayArea Snake.playArea).find?
           (fun position => decide (position ≠ food)) = some position :=
     Option.isSome_iff_exists.mp (List.find?_isSome.mpr
       ⟨candidate, hCandidateMem, decide_eq_true hCandidateNe⟩)
   obtain ⟨position, hPosition⟩ := hPositionSome
   simp only [Snake.differentFoodPosition]
   cases hPreferred :
-      (Snake.positionsInPlayArea Snake.playArea).find?
+      (Spec.positionsInPlayArea Snake.playArea).find?
         (fun candidate => decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) with
   | some preferred =>
     have hPredicate : preferred.x ≠ food.x ∧ preferred.y ≠ food.y := by
@@ -248,11 +355,11 @@ private theorem differentFoodPosition_inPlayArea (food : Position) :
       (Snake.differentFoodPosition Snake.playArea food) := by
   simp only [Snake.differentFoodPosition]
   cases hPreferred :
-      (Snake.positionsInPlayArea Snake.playArea).find?
+      (Spec.positionsInPlayArea Snake.playArea).find?
         (fun position => decide (position.x ≠ food.x ∧ position.y ≠ food.y)) with
   | some preferred =>
     have hPreferred' :
-        (Snake.positionsInPlayArea Snake.playArea).find?
+        (Spec.positionsInPlayArea Snake.playArea).find?
           (fun position =>
             !decide (position.x = food.x) && !decide (position.y = food.y)) =
           some preferred := by simpa using hPreferred
@@ -261,16 +368,16 @@ private theorem differentFoodPosition_inPlayArea (food : Position) :
       (List.mem_of_find?_eq_some hPreferred)
   | none =>
     have hPreferred' :
-        (Snake.positionsInPlayArea Snake.playArea).find?
+        (Spec.positionsInPlayArea Snake.playArea).find?
           (fun position =>
             !decide (position.x = food.x) && !decide (position.y = food.y)) = none := by
       simpa using hPreferred
     cases hFallback :
-        (Snake.positionsInPlayArea Snake.playArea).find?
+        (Spec.positionsInPlayArea Snake.playArea).find?
           (fun position => decide (position ≠ food)) with
     | none =>
       have hFallback' :
-          (Snake.positionsInPlayArea Snake.playArea).find?
+          (Spec.positionsInPlayArea Snake.playArea).find?
             (fun position => !decide (position = food)) = none := by
         simpa using hFallback
       change Spec.isWithinPlayArea Snake.playArea
@@ -278,49 +385,12 @@ private theorem differentFoodPosition_inPlayArea (food : Position) :
       simp [Spec.isWithinPlayArea, Snake.playArea]
     | some position =>
       have hFallback' :
-          (Snake.positionsInPlayArea Snake.playArea).find?
+          (Spec.positionsInPlayArea Snake.playArea).find?
             (fun position => !decide (position = food)) = some position := by
         simpa using hFallback
       change Spec.isWithinPlayArea Snake.playArea position
       exact positionsInPlayArea_within position
         (List.mem_of_find?_eq_some hFallback)
-
-private theorem availableFoodPosition_changesBoth
-    (food position : Position) (snake : Spec.Snake)
-    (hSelected : Snake.availableFoodPositionForSnake Snake.playArea food snake = some position)
-    (hPossible : ∃ candidate,
-      Spec.isWithinPlayArea Snake.playArea candidate ∧
-      candidate ≠ snake.position ∧ candidate ∉ snake.body ∧
-      candidate.x ≠ food.x ∧ candidate.y ≠ food.y) :
-    position.x ≠ food.x ∧ position.y ≠ food.y := by
-  rcases hPossible with ⟨candidate, hWithin, hHead, hBody, hx, hy⟩
-  simp only [Snake.availableFoodPositionForSnake] at hSelected
-  cases hPreferred :
-      (Snake.positionsInPlayArea Snake.playArea).find?
-        (fun candidate => Snake.isFreeForSnake candidate snake &&
-          decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) with
-  | some preferred =>
-    have hPosition : preferred = position := by
-      rw [hPreferred] at hSelected
-      simp [Option.orElse] at hSelected
-      exact hSelected
-    subst preferred
-    have hPredicate := List.find?_some
-      (p := fun (candidate : Position) =>
-        Snake.isFreeForSnake candidate snake &&
-          decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) hPreferred
-    exact of_decide_eq_true ((Bool.and_eq_true _ _).mp hPredicate).2
-  | none =>
-    have hMem : candidate ∈ Snake.positionsInPlayArea Snake.playArea :=
-      position_mem_positionsInPlayArea candidate
-        (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.1)
-        (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.2.2)
-    have hPredicate :
-        Snake.isFreeForSnake candidate snake &&
-          decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y) = true := by
-      simp [Snake.isFreeForSnake, hHead, hBody, hx, hy]
-    have hImpossible := List.find?_eq_none.mp hPreferred candidate hMem hPredicate
-    contradiction
 
 private theorem positionAfterMove_within (direction : Direction)
     (position : Position) (h : Spec.isWithinPlayArea Snake.playArea position) :
@@ -451,73 +521,6 @@ private theorem snakeFillsPlayArea_iff
     apply decide_eq_true
     exact hFull position (positionsInPlayArea_within position hMem)
 
-private theorem availableFoodPosition_none_iff_full
-    (food : Position) (snake : Spec.Snake) :
-    Snake.availableFoodPositionForSnake Snake.playArea food snake = none ↔
-      Spec.boardIsFull Snake.playArea snake := by
-  let positions := Snake.positionsInPlayArea Snake.playArea
-  constructor
-  · intro hNone position hWithin
-    have hMem := position_mem_positionsInPlayArea position
-      (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.1)
-      (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.2.2)
-    have hFallbackNone : positions.find? (Snake.isFreeForSnake · snake) = none := by
-      unfold Snake.availableFoodPositionForSnake at hNone
-      change
-        (positions.find? (fun candidate =>
-              Snake.isFreeForSnake candidate snake &&
-                decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) <|>
-            positions.find? (Snake.isFreeForSnake · snake)) = none at hNone
-      cases hPreferred :
-          positions.find? (fun candidate =>
-            Snake.isFreeForSnake candidate snake &&
-              decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) with
-      | none =>
-        rw [hPreferred] at hNone
-        simpa [Option.instOrElse, OrElse.orElse, Option.orElse] using hNone
-      | some preferred =>
-        rw [hPreferred] at hNone
-        simp [Option.orElse] at hNone
-    rw [List.find?_eq_none] at hFallbackNone
-    have hNotFree := hFallbackNone position hMem
-    by_cases hHead : position = snake.position
-    · exact Or.inl hHead
-    · by_cases hBody : position ∈ snake.body
-      · exact Or.inr hBody
-      · exfalso
-        apply hNotFree
-        simp [Snake.isFreeForSnake, hHead, hBody]
-  · intro hFull
-    have hNoFree (position : Position) (hMem : position ∈ positions) :
-        ¬ Snake.isFreeForSnake position snake = true := by
-      have hWithin := positionsInPlayArea_within position hMem
-      intro hFree
-      have hFreeProp := of_decide_eq_true
-        (by simpa [Snake.isFreeForSnake] using hFree)
-      rcases hFull position hWithin with hHead | hBody
-      · exact hFreeProp.1 hHead
-      · exact hFreeProp.2 hBody
-    have hPreferredNone :
-        positions.find? (fun candidate =>
-          Snake.isFreeForSnake candidate snake &&
-            decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) = none := by
-      rw [List.find?_eq_none]
-      intro position hMem hPredicate
-      have hFree := ((Bool.and_eq_true _ _).mp hPredicate).1
-      exact hNoFree position hMem hFree
-    have hFallbackNone :
-        positions.find? (Snake.isFreeForSnake · snake) = none := by
-      rw [List.find?_eq_none]
-      exact hNoFree
-    unfold Snake.availableFoodPositionForSnake
-    change
-      (positions.find? (fun candidate =>
-            Snake.isFreeForSnake candidate snake &&
-              decide (candidate.x ≠ food.x ∧ candidate.y ≠ food.y)) <|>
-          positions.find? (Snake.isFreeForSnake · snake)) = none
-    rw [hPreferredNone, hFallbackNone]
-    rfl
-
 theorem foodIsInPlayArea_step (input : Option PlayerInput) (state : GameState)
     (h : Spec.foodIsInPlayArea state Snake.playArea) :
     Spec.foodIsInPlayArea (Snake.step input state) Snake.playArea := by
@@ -541,14 +544,14 @@ theorem foodIsInPlayArea_step (input : Option PlayerInput) (state : GameState)
           (Snake.directionAfterInput input state.direction) state.snake.position = state.food :=
         by simpa [direction, intendedPosition] using hEating
       cases hAvailable :
-        Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
+        Snake.nextFoodPosition Snake.playArea state.random snake with
       | none =>
         simpa [Spec.foodIsInPlayArea, direction, intendedPosition, body, snake,
           hEatingRaw, hAvailable] using differentFoodPosition_inPlayArea state.food
       | some food =>
         simpa [Spec.foodIsInPlayArea, direction, intendedPosition, body, snake,
           hEatingRaw, hAvailable] using
-          (availableFoodPositionForSnake_spec state.food food snake hAvailable).1
+          (nextFoodPosition_spec state.random food snake hAvailable).1
     · have hEatingRaw :
         Snake.positionAfterMove Snake.playArea
           (Snake.directionAfterInput input state.direction) state.snake.position ≠ state.food :=
@@ -561,11 +564,11 @@ theorem foodIsInPlayArea_step (input : Option PlayerInput) (state : GameState)
           (Snake.directionAfterInput input state.direction) state.snake.position = state.food :=
         by simpa [direction, intendedPosition] using hEating
       cases hAvailable :
-        Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
+        Snake.nextFoodPosition Snake.playArea state.random snake with
       | none => simpa [Spec.foodIsInPlayArea, hEatingRaw, hAvailable] using h
       | some food =>
         simpa [Spec.foodIsInPlayArea, hEatingRaw, hAvailable] using
-          (availableFoodPositionForSnake_spec state.food food snake hAvailable).1
+          (nextFoodPosition_spec state.random food snake hAvailable).1
     · have hEatingRaw :
         Snake.positionAfterMove Snake.playArea
           (Snake.directionAfterInput input state.direction) state.snake.position ≠ state.food :=
@@ -610,11 +613,11 @@ theorem foodIsNotOnSnake_step (input : Option PlayerInput) (state : GameState)
     by_cases hEating : intendedPosition = state.food
     · rw [ite_eq_left hEating]
       cases hAvailable :
-          Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
+          Snake.nextFoodPosition Snake.playArea state.random snake with
       | none =>
         simp [Spec.foodIsNotOnSnake, direction, intendedPosition, hEating]
       | some food =>
-        have hSelected := availableFoodPositionForSnake_spec state.food food snake hAvailable
+        have hSelected := nextFoodPosition_spec state.random food snake hAvailable
         simpa [Spec.foodIsNotOnSnake, direction, intendedPosition, body, snake,
           hEating, hAvailable, hPlaying] using hSelected.2
     · rw [ite_eq_right hEating]
@@ -675,24 +678,24 @@ theorem foodMovesWhenEaten :
         Snake.positionAfterMove Snake.playArea direction state.snake.position ∈ state.snake.body :=
       by simpa [direction, intendedPosition] using hCollision
     rw [ite_eq_left hCollisionRaw]
-    cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
+    cases hAvailable : Snake.nextFoodPosition Snake.playArea state.random snake with
     | none =>
       simp [direction, hEatingRaw]
       intro hSame
       exact (differentFoodPosition_ne state.food) hSame
     | some food =>
-      have hFood := availableFoodPositionForSnake_spec state.food food snake hAvailable
+      have hFood := nextFoodPosition_spec state.random food snake hAvailable
       simp [direction, hEatingRaw]
       simpa [snake, intendedPosition, hEatingRaw] using hFood.2.1
   · have hCollisionRaw :
         Snake.positionAfterMove Snake.playArea direction state.snake.position ∉ state.snake.body :=
       by simpa [direction, intendedPosition] using hCollision
     rw [ite_eq_right hCollisionRaw]
-    cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
+    cases hAvailable : Snake.nextFoodPosition Snake.playArea state.random snake with
     | none =>
       simp [direction, hEatingRaw]
     | some food =>
-      have hFood := availableFoodPositionForSnake_spec state.food food snake hAvailable
+      have hFood := nextFoodPosition_spec state.random food snake hAvailable
       simp [direction, hPlaying, hEatingRaw]
       simpa [snake, intendedPosition, hEatingRaw] using hFood.2.1
 
@@ -730,111 +733,103 @@ theorem snakeGrowsWhenEating :
             (Snake.directionAfterInput input state.direction) state.snake.position =
           state.food
     · cases hAvailable :
-        Snake.availableFoodPositionForSnake Snake.playArea state.food
+        Snake.nextFoodPosition Snake.playArea state.random
           { position := state.food,
             body := state.snake.position :: state.snake.body }
       · simp [hEats, hAvailable]
       · simp [hEats, hAvailable]
     · exact (hEats hEating).elim
 
-theorem foodChangesBothCoordinatesWhenPossible :
-    Spec.foodChangesBothCoordinatesWhenPossible Snake.step Snake.playArea := by
+private theorem nextFoodForRandom_whenEating
+    (input : Option PlayerInput) (state : GameState) (random : Nat)
+    (selected : Position)
+    (hRunning : Spec.gameIsRunning state)
+    (hEating : Spec.foodIsEaten state (Snake.step input state))
+    (hSelected : Snake.nextFoodPosition Snake.playArea random
+      (Snake.snakeAfterEating input state) = some selected) :
+    Spec.nextFoodForRandom Snake.step input state random = selected := by
+  have hEnded : ¬ state.phase ≠ .playing := by
+    change state.phase = .playing at hRunning
+    simp [hRunning]
+  have hAtFood :
+      Snake.positionAfterMove Snake.playArea
+          (Snake.directionAfterInput input state.direction) state.snake.position =
+        state.food := by
+    rcases step_some_direction_and_position input state
+      (Snake.step input state) hRunning rfl with ⟨hDirection, hPosition⟩
+    unfold Spec.foodIsEaten at hEating
+    rw [hDirection] at hPosition
+    exact hPosition.symm.trans hEating
+  simp only [Snake.snakeAfterEating] at hSelected
+  have hSelectedFood :
+      Snake.nextFoodPosition Snake.playArea random
+          { position := state.food,
+            body := state.snake.position :: state.snake.body } = some selected := by
+    simpa [hAtFood] using hSelected
+  unfold Spec.nextFoodForRandom Snake.step
+  rw [ite_eq_right hEnded]
+  by_cases hCollision :
+      Snake.positionAfterMove Snake.playArea
+          (Snake.directionAfterInput input state.direction) state.snake.position ∈
+        state.snake.body
+  · rw [ite_eq_left hCollision]
+    simp [hAtFood, hSelectedFood]
+  · rw [ite_eq_right hCollision]
+    simp [hAtFood, hSelectedFood]
+
+theorem foodIsPlacedFairly :
+    Spec.foodIsPlacedFairly Snake.step Snake.playArea := by
   intro input state hRunning
   dsimp only
-  intro hEaten hNotWon hPossible
-  let direction := Snake.directionAfterInput input state.direction
-  let intendedPosition := Snake.positionAfterMove Snake.playArea direction state.snake.position
-  let body : List Position := if intendedPosition = state.food then
-      state.snake.position :: state.snake.body
-    else if state.snake.body.isEmpty then [] else
-      state.snake.position :: state.snake.body.dropLast
-  let snake : Spec.Snake := { position := intendedPosition, body := body }
-  have hNotEnded : ¬ state.phase ≠ .playing := by
+  intro hEaten position hFree
+  let nextState := Snake.step input state
+  let grown := Snake.snakeAfterEating input state
+  have hEnded : ¬ state.phase ≠ .playing := by
     simpa [Spec.gameIsRunning] using hRunning
-  rcases step_some_direction_and_position input state (Snake.step input state)
-      hRunning rfl with ⟨hDirection, hPosition⟩
-  unfold Spec.foodIsEaten at hEaten
-  have hEatingRaw :
-      Snake.positionAfterMove Snake.playArea direction state.snake.position = state.food := by
-    rw [hPosition, hDirection] at hEaten
-    simpa [direction] using hEaten
-  have hEatingMove :
+  have hAtFood :
       Snake.positionAfterMove Snake.playArea
-          (Snake.directionAfterInput input state.direction) state.snake.position = state.food := by
-    simpa [direction] using hEatingRaw
-  unfold Snake.step at hPossible hNotWon ⊢
-  rw [ite_eq_right hNotEnded] at hPossible hNotWon ⊢
-  by_cases hCollision : intendedPosition ∈ state.snake.body
-  · have hCollisionRaw :
-        Snake.positionAfterMove Snake.playArea direction state.snake.position ∈ state.snake.body :=
-      by simpa [direction, intendedPosition] using hCollision
-    rw [ite_eq_left hCollisionRaw] at hPossible hNotWon ⊢
-    rw [ite_eq_left hEatingRaw] at hPossible hNotWon ⊢
-    cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
-    | some food =>
-      have hPossibleSnake : ∃ candidate,
-          Spec.isWithinPlayArea Snake.playArea candidate ∧
-            candidate ≠ snake.position ∧ candidate ∉ snake.body ∧
-            candidate.x ≠ state.food.x ∧ candidate.y ≠ state.food.y := by
-        simpa [direction, intendedPosition, body, snake, hEatingRaw] using hPossible
-      have hBoth := availableFoodPosition_changesBoth state.food food snake
-        hAvailable hPossibleSnake
-      have hSelected :
-          (Snake.availableFoodPositionForSnake Snake.playArea state.food snake).getD
-              (Snake.differentFoodPosition Snake.playArea state.food) = food := by
-        simp [hAvailable]
-      have hSelectedRaw :
-          (Snake.availableFoodPositionForSnake Snake.playArea state.food
-              { position := Snake.positionAfterMove Snake.playArea
-                  (Snake.directionAfterInput input state.direction) state.snake.position,
-                body := state.snake.position :: state.snake.body }).getD
-            (Snake.differentFoodPosition Snake.playArea state.food) = food := by
-        simpa [direction, intendedPosition, body, snake, hEatingMove] using hSelected
-      have hSelectedAtFood :
-          (Snake.availableFoodPositionForSnake Snake.playArea state.food
-              { position := state.food,
-                body := state.snake.position :: state.snake.body }).getD
-            (Snake.differentFoodPosition Snake.playArea state.food) = food := by
-        simpa [hEatingMove] using hSelectedRaw
-      simpa [hEatingMove, hSelectedAtFood] using hBoth
-    | none =>
-      have hFull := (availableFoodPosition_none_iff_full state.food snake).mp hAvailable
-      have hPossibleSnake : ∃ candidate,
-          Spec.isWithinPlayArea Snake.playArea candidate ∧
-            candidate ≠ snake.position ∧ candidate ∉ snake.body ∧
-            candidate.x ≠ state.food.x ∧ candidate.y ≠ state.food.y := by
-        simpa [direction, intendedPosition, body, snake, hEatingRaw] using hPossible
-      rcases hPossibleSnake with ⟨candidate, hWithin, hHead, hBody, hx, hy⟩
-      rcases hFull candidate hWithin with hHead' | hBody'
-      · exact (hHead hHead').elim
-      · exact (hBody hBody').elim
-  · have hCollisionRaw :
-        Snake.positionAfterMove Snake.playArea direction state.snake.position ∉ state.snake.body :=
-      by simpa [direction, intendedPosition] using hCollision
-    rw [ite_eq_right hCollisionRaw] at hPossible hNotWon ⊢
-    rw [ite_eq_left hEatingRaw] at hPossible hNotWon ⊢
-    cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake with
-    | some food =>
-      have hAvailableRaw :
-          Snake.availableFoodPositionForSnake Snake.playArea state.food
-            { position := state.food,
-              body := state.snake.position :: state.snake.body } = some food := by
-        simpa [direction, intendedPosition, body, snake, hEatingRaw] using hAvailable
-      have hPossibleSnake : ∃ candidate,
-          Spec.isWithinPlayArea Snake.playArea candidate ∧
-            candidate ≠ snake.position ∧ candidate ∉ snake.body ∧
-            candidate.x ≠ state.food.x ∧ candidate.y ≠ state.food.y := by
-        simpa [direction, intendedPosition, body, snake, hEatingRaw, hAvailableRaw] using hPossible
-      have hBoth := availableFoodPosition_changesBoth state.food food snake
-        hAvailable hPossibleSnake
-      simpa [direction, intendedPosition, body, snake, hEatingRaw, hAvailable] using hBoth
-    | none =>
-      have hAvailableRaw :
-          Snake.availableFoodPositionForSnake Snake.playArea state.food
-            { position := state.food,
-              body := state.snake.position :: state.snake.body } = none := by
-        simpa [direction, intendedPosition, body, snake, hEatingRaw] using hAvailable
-      simp [hEatingMove, hAvailableRaw] at hNotWon
+          (Snake.directionAfterInput input state.direction) state.snake.position =
+        state.food := by
+    rcases step_some_direction_and_position input state nextState hRunning rfl with
+      ⟨hDirection, hPosition⟩
+    unfold Spec.foodIsEaten at hEaten
+    rw [hDirection] at hPosition
+    exact hPosition.symm.trans (by simpa [nextState] using hEaten)
+  have hGrownSnake : grown = nextState.snake := by
+    unfold grown Snake.snakeAfterEating nextState Snake.step
+    rw [ite_eq_right hEnded]
+    by_cases hCollision :
+        Snake.positionAfterMove Snake.playArea
+            (Snake.directionAfterInput input state.direction) state.snake.position ∈
+          state.snake.body
+    · rw [ite_eq_left hCollision, ite_eq_left hAtFood]
+    · rw [ite_eq_right hCollision, ite_eq_left hAtFood]
+      split <;> simp [hAtFood]
+  have hFreeGrown : Spec.isFree Snake.playArea grown position := by
+    simpa [grown, hGrownSnake, nextState] using hFree
+  rcases freeFoodPositionIndex grown position hFreeGrown with
+    ⟨index, hIndex, hUnique⟩
+  refine ⟨index, ⟨?_, ?_⟩, ?_⟩
+  · simpa [Spec.numberOfFreePositions, hGrownSnake] using hIndex.1
+  · exact nextFoodForRandom_whenEating input state index position
+      hRunning hEaten (by simpa [grown] using hIndex.2)
+  · intro other hOther
+    have hRandom : other < Spec.numberOfFreePositions Snake.playArea grown := by
+      simpa [Spec.numberOfFreePositions, hGrownSnake, nextState] using hOther.1
+    have hOtherIndex : other <
+        (Snake.freeFoodPositions Snake.playArea grown).length := by
+      change other < (Snake.freeFoodPositions Snake.playArea grown).length
+      rw [freeFoodPositions_eq_spec]
+      exact hRandom
+    have hSelected := nextFoodPosition_at_index grown other hOtherIndex
+    have hOutput := nextFoodForRandom_whenEating input state other
+      (Snake.freeFoodPositions Snake.playArea grown)[other]
+      hRunning hEaten (by simpa [grown] using hSelected)
+    have hSame :
+        (Snake.freeFoodPositions Snake.playArea grown)[other] = position :=
+      hOutput.symm.trans hOther.2
+    apply hUnique other
+    exact ⟨hRandom, by simpa [hSame] using hSelected⟩
 
 private theorem gameEndsOnSelfCollision :
     Spec.gameEndsOnSelfCollision Snake.step := by
@@ -898,20 +893,20 @@ private theorem gameEndsWhenPlayAreaIsFull :
       simpa [direction, intendedPosition] using hEating
     rw [ite_eq_left hEatingRaw]
     cases hAvailableRaw :
-        Snake.availableFoodPositionForSnake Snake.playArea state.food
+        Snake.nextFoodPosition Snake.playArea state.random
           { position := Snake.positionAfterMove Snake.playArea
               (Snake.directionAfterInput input state.direction) state.snake.position,
             body := state.snake.position :: state.snake.body } with
     | some food =>
       have hAvailable :
-          Snake.availableFoodPositionForSnake Snake.playArea state.food snake = some food := by
+          Snake.nextFoodPosition Snake.playArea state.random snake = some food := by
         simpa [direction, intendedPosition, body, snake, hEating] using hAvailableRaw
       have hAvailableFood :
-          Snake.availableFoodPositionForSnake Snake.playArea state.food
+          Snake.nextFoodPosition Snake.playArea state.random
               { position := state.food,
                 body := state.snake.position :: state.snake.body } = some food := by
         simpa [hEatingRaw] using hAvailableRaw
-      have hFood := availableFoodPositionForSnake_spec state.food food snake hAvailable
+      have hFood := nextFoodPosition_spec state.random food snake hAvailable
       have hNotFull : ¬ Spec.boardIsFull Snake.playArea snake := by
         intro hFull
         rcases hFull food hFood.1 with hHead | hBody
@@ -932,14 +927,14 @@ private theorem gameEndsWhenPlayAreaIsFull :
       · simp [hEatingRaw, hAvailableFood, hPhasePlaying]
     | none =>
       have hAvailable :
-          Snake.availableFoodPositionForSnake Snake.playArea state.food snake = none := by
+          Snake.nextFoodPosition Snake.playArea state.random snake = none := by
         simpa [direction, intendedPosition, body, snake, hEating] using hAvailableRaw
       have hAvailableFood :
-          Snake.availableFoodPositionForSnake Snake.playArea state.food
+          Snake.nextFoodPosition Snake.playArea state.random
               { position := state.food,
                 body := state.snake.position :: state.snake.body } = none := by
         simpa [hEatingRaw] using hAvailableRaw
-      have hFull := (availableFoodPosition_none_iff_full state.food snake).mp hAvailable
+      have hFull := (nextFoodPosition_none_iff_full state.random snake).mp hAvailable
       have hSnake : snake = { position := state.food, body := state.snake.position :: state.snake.body } := by
         simp [snake, intendedPosition, direction, body, hEating]
       rw [hSnake] at hFull
@@ -989,7 +984,7 @@ theorem snakeIsInPlayArea_step (input : Option PlayerInput) (state : GameState)
   · rw [ite_eq_left hCollision]
     by_cases hEating : intendedPosition = state.food
     · rw [ite_eq_left hEating]
-      cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake <;>
+      cases hAvailable : Snake.nextFoodPosition Snake.playArea state.random snake <;>
         simpa [direction, intendedPosition, body, snake, hEating, hAvailable] using
           snakeAfterMove_inPlayArea direction state.snake true h
     · rw [ite_eq_right hEating]
@@ -998,7 +993,7 @@ theorem snakeIsInPlayArea_step (input : Option PlayerInput) (state : GameState)
   · rw [ite_eq_right hCollision]
     by_cases hEating : intendedPosition = state.food
     · rw [ite_eq_left hEating]
-      cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake <;>
+      cases hAvailable : Snake.nextFoodPosition Snake.playArea state.random snake <;>
         simpa [direction, intendedPosition, body, snake, hEating, hAvailable] using
           snakeAfterMove_inPlayArea direction state.snake true h
     · rw [ite_eq_right hEating]
@@ -1023,7 +1018,7 @@ theorem snakeIsConnected_step (input : Option PlayerInput) (state : GameState)
   · rw [ite_eq_left hCollision]
     by_cases hEating : intendedPosition = state.food
     · rw [ite_eq_left hEating]
-      cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake <;>
+      cases hAvailable : Snake.nextFoodPosition Snake.playArea state.random snake <;>
         simpa [direction, intendedPosition, body, snake, hEating, hAvailable] using
           snakeAfterMove_connected direction state.snake true h
     · rw [ite_eq_right hEating]
@@ -1032,7 +1027,7 @@ theorem snakeIsConnected_step (input : Option PlayerInput) (state : GameState)
   · rw [ite_eq_right hCollision]
     by_cases hEating : intendedPosition = state.food
     · rw [ite_eq_left hEating]
-      cases hAvailable : Snake.availableFoodPositionForSnake Snake.playArea state.food snake <;>
+      cases hAvailable : Snake.nextFoodPosition Snake.playArea state.random snake <;>
         simpa [direction, intendedPosition, body, snake, hEating, hAvailable] using
           snakeAfterMove_connected direction state.snake true h
     · rw [ite_eq_right hEating]
@@ -1074,7 +1069,7 @@ private theorem gameStepRequirements :
     arrowInputSetsDirection,
     wrapsAtEdge,
     foodMovesWhenEaten,
-    foodChangesBothCoordinatesWhenPossible,
+    foodIsPlacedFairly,
     snakeGrowsWhenEating,
     gameEndsOnSelfCollision,
     gameEndsWhenPlayAreaIsFull,
