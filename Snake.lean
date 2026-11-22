@@ -12,9 +12,11 @@ def initialState : GameState :=
     random := 0 }
 
 def playArea : PlayArea :=
-  { leftEdge := 0, rightEdge := 39, topEdge := 0, bottomEdge := 29 }
+  { leftEdge := 0, rightEdge := 29, topEdge := 0, bottomEdge := 19 }
 
-def cellSizePixels : Nat := 10
+def cellSizePixels : Nat := 20
+
+def moveIntervalMilliseconds : Nat := 150
 
 def canvasWidthPixels : Nat := (playArea.rightEdge + 1) * cellSizePixels
 

@@ -67,19 +67,23 @@ private theorem positionAfterMove_moves (direction : Direction) (state : GameSta
               state.snake.position } } := by
   cases direction
   · intro h
-    by_cases hx : state.snake.position.x = 0 <;>
+    by_cases hx : state.snake.position.x = Snake.playArea.leftEdge <;>
+      simp only [Snake.playArea] at hx <;>
       simp [Snake.positionAfterMove, Snake.playArea, Spec.isAtEdge,
         Spec.movesInDirection, hx] at h ⊢ <;> omega
   · intro h
-    by_cases hy : state.snake.position.y = 0 <;>
+    by_cases hy : state.snake.position.y = Snake.playArea.topEdge <;>
+      simp only [Snake.playArea] at hy <;>
       simp [Snake.positionAfterMove, Snake.playArea, Spec.isAtEdge,
         Spec.movesInDirection, hy] at h ⊢ <;> omega
   · intro h
-    by_cases hx : state.snake.position.x = 39 <;>
+    by_cases hx : state.snake.position.x = Snake.playArea.rightEdge <;>
+      simp only [Snake.playArea] at hx <;>
       simp [Snake.positionAfterMove, Snake.playArea, Spec.isAtEdge,
         Spec.movesInDirection, hx] at h ⊢ <;> omega
   · intro h
-    by_cases hy : state.snake.position.y = 29 <;>
+    by_cases hy : state.snake.position.y = Snake.playArea.bottomEdge <;>
+      simp only [Snake.playArea] at hy <;>
       simp [Snake.positionAfterMove, Snake.playArea, Spec.isAtEdge,
         Spec.movesInDirection, hy] at h ⊢ <;> omega
 
@@ -132,14 +136,6 @@ theorem gameStateInvariant_initial :
     Spec.snakeIsConnected, Spec.segmentsAreConnected,
     Spec.isWithinPlayArea, Snake.initialState, Snake.playArea]
 
-private theorem position_mem_positionsInPlayArea_early (position : Position)
-    (hRight : position.x ≤ 39) (hBottom : position.y ≤ 29) :
-    position ∈ Spec.positionsInPlayArea Snake.playArea := by
-  simp only [Spec.positionsInPlayArea, List.mem_flatMap]
-  refine ⟨position.y, by simp [Snake.playArea]; omega, ?_⟩
-  refine List.mem_map.mpr ⟨position.x, by simp [Snake.playArea]; omega, ?_⟩
-  simp [Snake.playArea]
-
 private theorem positionsInPlayArea_within (position : Position)
     (h : position ∈ Spec.positionsInPlayArea Snake.playArea) :
     Spec.isWithinPlayArea Snake.playArea position := by
@@ -151,17 +147,24 @@ private theorem positionsInPlayArea_within (position : Position)
   omega
 
 private theorem position_mem_positionsInPlayArea (position : Position)
-    (hRight : position.x ≤ 39) (hBottom : position.y ≤ 29) :
+    (hWithin : Spec.isWithinPlayArea Snake.playArea position) :
     position ∈ Spec.positionsInPlayArea Snake.playArea := by
-  simp only [Spec.positionsInPlayArea, List.mem_flatMap]
-  refine ⟨position.y, ?_, ?_⟩
-  · simp [Snake.playArea]
+  unfold Spec.isWithinPlayArea at hWithin
+  simp only [Spec.positionsInPlayArea, List.mem_flatMap, List.mem_map]
+  rcases hWithin with ⟨hLeft, hRight, hTop, hBottom⟩
+  refine ⟨position.y - Snake.playArea.topEdge, ?_,
+    position.x - Snake.playArea.leftEdge, ?_, ?_⟩
+  · simp [List.mem_range]
     omega
-  · simp only [List.mem_map]
-    refine ⟨position.x, ?_, ?_⟩
-    · simp [Snake.playArea]
-      omega
-    · simp [Snake.playArea]
+  · simp [List.mem_range]
+    omega
+  · have hx : Snake.playArea.leftEdge +
+        (position.x - Snake.playArea.leftEdge) = position.x :=
+      Nat.add_sub_of_le hLeft
+    have hy : Snake.playArea.topEdge +
+        (position.y - Snake.playArea.topEdge) = position.y :=
+      Nat.add_sub_of_le hTop
+    simp [hx, hy]
 
 private theorem positionsInPlayArea_nodup :
     (Spec.positionsInPlayArea Snake.playArea).Nodup := by
@@ -221,9 +224,7 @@ private theorem freeFoodPositionIndex (snake : Spec.Snake) (position : Position)
   have hMember : position ∈ positions := by
     change position ∈ Snake.freeFoodPositions Snake.playArea snake
     rw [freeFoodPositions_eq_spec, List.mem_filter]
-    refine ⟨position_mem_positionsInPlayArea position ?_ ?_, decide_eq_true hFree⟩
-    · simpa [Spec.isWithinPlayArea, Snake.playArea] using hFree.1.2.1
-    · simpa [Spec.isWithinPlayArea, Snake.playArea] using hFree.1.2.2.2
+    exact ⟨position_mem_positionsInPlayArea position hFree.1, decide_eq_true hFree⟩
   rcases List.mem_iff_getElem.mp hMember with ⟨index, hIndex, hAtIndex⟩
   refine ⟨index, ⟨by simpa [hPositionsLength] using hIndex, ?_⟩, ?_⟩
   · rw [nextFoodPosition_at_index snake index hIndex]
@@ -265,9 +266,7 @@ private theorem nextFoodPosition_none_iff_full
   unfold Snake.nextFoodPosition Snake.freeFoodPositions Spec.boardIsFull
   constructor
   · intro hNone position hWithin
-    have hMem := position_mem_positionsInPlayArea position
-      (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.1)
-      (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.2.2)
+    have hMem := position_mem_positionsInPlayArea position hWithin
     by_cases hHead : position = snake.position
     · exact Or.inl hHead
     by_cases hBody : position ∈ snake.body
@@ -312,11 +311,10 @@ private theorem differentFoodPosition_ne (food : Position) :
   let origin : Position := { x := 0, y := 0 }
   let alternate : Position := { x := 1, y := 0 }
   let candidate := if food = origin then alternate else origin
-  have hCandidateMem := position_mem_positionsInPlayArea candidate
-    (by by_cases hFood : food = origin <;>
-      simp [candidate, hFood, origin, alternate])
-    (by by_cases hFood : food = origin <;>
-      simp [candidate, hFood, origin, alternate])
+  have hCandidateMem := position_mem_positionsInPlayArea candidate (by
+    by_cases hFood : food = origin <;>
+      simp [Spec.isWithinPlayArea, Snake.playArea, candidate, hFood, origin,
+        alternate])
   have hCandidateNe : candidate ≠ food := by
     by_cases hFood : food = origin
     · simp [candidate, hFood, origin, alternate]
@@ -396,18 +394,23 @@ private theorem positionAfterMove_within (direction : Direction)
     (position : Position) (h : Spec.isWithinPlayArea Snake.playArea position) :
     Spec.isWithinPlayArea Snake.playArea
       (Snake.positionAfterMove Snake.playArea direction position) := by
-  change 0 ≤ position.x ∧ position.x ≤ 39 ∧ 0 ≤ position.y ∧ position.y ≤ 29 at h
+  unfold Spec.isWithinPlayArea at h
+  simp only [Snake.playArea] at h
   cases direction
-  · by_cases hEdge : position.x = 0 <;>
+  · by_cases hEdge : position.x = Snake.playArea.leftEdge <;>
+      simp only [Snake.playArea] at hEdge <;>
       simp [Spec.isWithinPlayArea, Snake.positionAfterMove,
         Snake.playArea, hEdge] <;> omega
-  · by_cases hEdge : position.y = 0 <;>
+  · by_cases hEdge : position.y = Snake.playArea.topEdge <;>
+      simp only [Snake.playArea] at hEdge <;>
       simp [Spec.isWithinPlayArea, Snake.positionAfterMove,
         Snake.playArea, hEdge] <;> omega
-  · by_cases hEdge : position.x = 39 <;>
+  · by_cases hEdge : position.x = Snake.playArea.rightEdge <;>
+      simp only [Snake.playArea] at hEdge <;>
       simp [Spec.isWithinPlayArea, Snake.positionAfterMove,
         Snake.playArea, hEdge] <;> omega
-  · by_cases hEdge : position.y = 29 <;>
+  · by_cases hEdge : position.y = Snake.playArea.bottomEdge <;>
+      simp only [Snake.playArea] at hEdge <;>
       simp [Spec.isWithinPlayArea, Snake.positionAfterMove,
         Snake.playArea, hEdge] <;> omega
 
@@ -416,16 +419,20 @@ private theorem positionAfterMove_adjacent (direction : Direction)
     Spec.positionsAreAdjacent Snake.playArea position
       (Snake.positionAfterMove Snake.playArea direction position) := by
   cases direction
-  · by_cases hEdge : position.x = 0 <;>
+  · by_cases hEdge : position.x = Snake.playArea.leftEdge <;>
+      simp only [Snake.playArea] at hEdge <;>
       simp [Spec.positionsAreAdjacent, Snake.positionAfterMove,
         Snake.playArea, hEdge] <;> omega
-  · by_cases hEdge : position.y = 0 <;>
+  · by_cases hEdge : position.y = Snake.playArea.topEdge <;>
+      simp only [Snake.playArea] at hEdge <;>
       simp [Spec.positionsAreAdjacent, Snake.positionAfterMove,
         Snake.playArea, hEdge] <;> omega
-  · by_cases hEdge : position.x = 39 <;>
+  · by_cases hEdge : position.x = Snake.playArea.rightEdge <;>
+      simp only [Snake.playArea] at hEdge <;>
       simp [Spec.positionsAreAdjacent, Snake.positionAfterMove,
         Snake.playArea, hEdge] <;> omega
-  · by_cases hEdge : position.y = 29 <;>
+  · by_cases hEdge : position.y = Snake.playArea.bottomEdge <;>
+      simp only [Snake.playArea] at hEdge <;>
       simp [Spec.positionsAreAdjacent, Snake.positionAfterMove,
         Snake.playArea, hEdge] <;> omega
 
@@ -514,9 +521,7 @@ private theorem snakeFillsPlayArea_iff
   constructor
   · intro hAll position hWithin
     exact of_decide_eq_true (hAll position
-      (position_mem_positionsInPlayArea position
-        (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.1)
-        (by simpa [Spec.isWithinPlayArea, Snake.playArea] using hWithin.2.2.2)))
+      (position_mem_positionsInPlayArea position hWithin))
   · intro hFull position hMem
     apply decide_eq_true
     exact hFull position (positionsInPlayArea_within position hMem)

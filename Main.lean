@@ -23,7 +23,8 @@ def main : IO Unit := do
     let current ← state.get
     let previous ← previousSnake.get
     let moveTime ← lastMoveTime.get
-    let progress := min 1.0 ((timestamp - moveTime) / 120.0)
+    let progress := min 1.0
+      ((timestamp - moveTime) / Snake.moveIntervalMilliseconds.toFloat)
     let cellSize := Snake.cellSizePixels.toFloat
     let snakeColor := "#3fb950"
     let drawMovingSegment (fromPosition toPosition : Position) : IO Unit := do
@@ -129,7 +130,7 @@ def main : IO Unit := do
       previousSnake.set Snake.initialState.snake
       lastMoveTime.set (← now)
 
-  _ ← setInterval 120 do
+  _ ← setInterval Snake.moveIntervalMilliseconds do
     let current ← state.get
     let input ← pendingInput.get
     pendingInput.set none
