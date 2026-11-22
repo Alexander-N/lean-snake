@@ -4,12 +4,8 @@ namespace Snake
 
 open Spec
 
-def initialState : GameState :=
-  { snake := { position := { x := 7, y := 4 }, body := [] },
-    food := { x := 20, y := 14 },
-    direction := .right,
-    phase := .playing,
-    random := 0 }
+def initialSnake : Spec.Snake :=
+  { position := { x := 7, y := 4 }, body := [] }
 
 def playArea : PlayArea :=
   { leftEdge := 0, rightEdge := 29, topEdge := 0, bottomEdge := 19 }
@@ -58,6 +54,14 @@ def nextFoodPosition (area : PlayArea) (random : Nat) (snake : Spec.Snake) :
     Option Position :=
   let positions := freeFoodPositions area snake
   positions[random % positions.length]?
+
+def initialState (random : Nat) : GameState :=
+  let food := (nextFoodPosition playArea random initialSnake).getD initialSnake.position
+  { snake := initialSnake,
+    food := food,
+    direction := .right,
+    phase := .playing,
+    random := random }
 
 def differentFoodPosition (area : PlayArea) (food : Position) : Position :=
   let positions := Spec.positionsInPlayArea area

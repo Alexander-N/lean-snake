@@ -370,6 +370,18 @@ def foodIsPlacedFairly (step : Step) (area : PlayArea) : Prop :=
 
 
 /-!
+### Initial food is placed fairly
+For a one-segment initial snake, every free position is equally likely to be the
+initial food position.
+-/
+def initialFoodIsPlacedFairly (makeInitialState : Nat → GameState)
+    (area : PlayArea) (snake : Snake) : Prop :=
+  ∀ position, isFree area snake position →
+    ExactlyOne fun random =>
+      random < numberOfFreePositions area snake ∧
+        (makeInitialState random).food = position
+
+/-!
 ### All game requirements
 -/
 def gameStateInvariant (area : PlayArea) (state : GameState) : Prop :=

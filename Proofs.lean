@@ -124,18 +124,6 @@ theorem wrapsAtEdge :
         Spec.isAtEdge] at hAtEdge ⊢ <;>
       first | simp_all | (split at hPosition <;> simp_all)
 
-theorem foodIsInPlayArea_initial :
-    Spec.foodIsInPlayArea Snake.initialState Snake.playArea := by
-  simp [Spec.foodIsInPlayArea, Spec.isWithinPlayArea,
-    Snake.initialState, Snake.playArea]
-
-theorem gameStateInvariant_initial :
-    Spec.gameStateInvariant Snake.playArea Snake.initialState := by
-  simp [Spec.gameStateInvariant, Spec.foodIsInPlayArea,
-    Spec.foodIsNotOnSnake, Spec.snakeIsInPlayArea, Spec.boardIsFull,
-    Spec.snakeIsConnected, Spec.segmentsAreConnected,
-    Spec.isWithinPlayArea, Snake.initialState, Snake.playArea]
-
 private theorem positionsInPlayArea_within (position : Position)
     (h : position ∈ Spec.positionsInPlayArea Snake.playArea) :
     Spec.isWithinPlayArea Snake.playArea position := by
@@ -240,6 +228,25 @@ private theorem freeFoodPositionIndex (snake : Spec.Snake) (position : Position)
     exact (hNodup.getElem_inj (hi := hOtherIndex) (hj := hIndex)).mp
       (hSame.trans hAtIndex.symm)
 
+theorem initialFoodIsPlacedFairly :
+    Spec.initialFoodIsPlacedFairly Snake.initialState Snake.playArea
+      Snake.initialSnake := by
+  intro position hFree
+  rcases freeFoodPositionIndex Snake.initialSnake position hFree with
+    ⟨random, hRandom, hUnique⟩
+  refine ⟨random, ⟨hRandom.1, ?_⟩, ?_⟩
+  · simp [Snake.initialState, hRandom.2]
+  · intro other hOther
+    apply hUnique other
+    refine ⟨hOther.1, ?_⟩
+    unfold Snake.initialState at hOther
+    cases hSelected : Snake.nextFoodPosition Snake.playArea other Snake.initialSnake with
+    | none =>
+      simp [hSelected] at hOther
+      exact False.elim (hFree.2.1 hOther.2.symm)
+    | some food =>
+      simpa [hSelected] using hOther.2
+
 private theorem nextFoodPosition_spec
     (random : Nat) (position : Position) (snake : Spec.Snake)
     (h : Snake.nextFoodPosition Snake.playArea random snake = some position) :
@@ -305,6 +312,48 @@ private theorem nextFoodPosition_none_iff_full
       · exact hFreeProp.2 hBody
     rw [hEmpty]
     rfl
+
+private theorem initialSnakeDoesNotFillPlayArea :
+    ¬ Spec.boardIsFull Snake.playArea Snake.initialSnake := by
+  intro hFull
+  let origin : Position := { x := 0, y := 0 }
+  have hOrigin : Spec.isWithinPlayArea Snake.playArea origin := by
+    simp [Spec.isWithinPlayArea, Snake.playArea, origin]
+  rcases hFull origin hOrigin with hHead | hBody
+  · simp [origin, Snake.initialSnake] at hHead
+  · simp [Snake.initialSnake] at hBody
+
+theorem foodIsInPlayArea_initial (random : Nat) :
+    Spec.foodIsInPlayArea (Snake.initialState random) Snake.playArea := by
+  unfold Spec.foodIsInPlayArea Snake.initialState
+  cases hFood : Snake.nextFoodPosition Snake.playArea random Snake.initialSnake with
+  | none =>
+    exact False.elim (initialSnakeDoesNotFillPlayArea
+      ((nextFoodPosition_none_iff_full random Snake.initialSnake).mp hFood))
+  | some food =>
+    have h := nextFoodPosition_spec random food Snake.initialSnake hFood
+    simpa using h.1
+
+theorem gameStateInvariant_initial (random : Nat) :
+    Spec.gameStateInvariant Snake.playArea (Snake.initialState random) := by
+  unfold Spec.gameStateInvariant
+  refine ⟨foodIsInPlayArea_initial random, ?_, ?_, ?_, ?_⟩
+  · unfold Spec.foodIsNotOnSnake Snake.initialState
+    cases hFood : Snake.nextFoodPosition Snake.playArea random Snake.initialSnake with
+    | none =>
+      exact False.elim (initialSnakeDoesNotFillPlayArea
+        ((nextFoodPosition_none_iff_full random Snake.initialSnake).mp hFood))
+    | some food =>
+      have h := nextFoodPosition_spec random food Snake.initialSnake hFood
+      exact Or.inr (by simpa using h.2)
+  · simp [Spec.snakeIsInPlayArea, Spec.isWithinPlayArea, Snake.initialState,
+      Snake.initialSnake, Snake.playArea]
+  · intro hWon
+    contradiction
+  · simp [Spec.snakeIsConnected, Spec.segmentsAreConnected, Snake.initialState,
+      Snake.initialSnake]
+
+
 
 private theorem differentFoodPosition_ne (food : Position) :
     Snake.differentFoodPosition Snake.playArea food ≠ food := by
@@ -1080,9 +1129,10 @@ private theorem gameStepRequirements :
     gameEndsWhenPlayAreaIsFull,
     gameHasNoStepAfterEnd⟩
 
-theorem gameRequirements :
-    Spec.gameRequirements Snake.initialState Snake.step Snake.playArea := by
-  exact ⟨gameStateInvariant_initial, gameStateInvariant_step, gameStepRequirements⟩
+theorem gameRequirements (random : Nat) :
+    Spec.gameRequirements (Snake.initialState random) Snake.step Snake.playArea := by
+  exact ⟨gameStateInvariant_initial random, gameStateInvariant_step,
+    gameStepRequirements⟩
 
 theorem gameStateInvariant_holdsForReachableStates
     (step : Step) (area : PlayArea) (initialState : GameState)

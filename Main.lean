@@ -14,9 +14,14 @@ def main : IO Unit := do
   let context ← canvas.context2d
   IO.setRandSeed (← now).toUInt64.toNat
 
-  let state ← IO.mkRef Snake.initialState
+  let makeInitialState : IO GameState := do
+    let positionCount := Spec.numberOfFreePositions Snake.playArea Snake.initialSnake
+    let random ← IO.rand 0 (positionCount - 1)
+    pure (Snake.initialState random)
+  let initial ← makeInitialState
+  let state ← IO.mkRef initial
   let pendingInput ← IO.mkRef (none : Option PlayerInput)
-  let previousSnake ← IO.mkRef Snake.initialState.snake
+  let previousSnake ← IO.mkRef initial.snake
   let lastMoveTime ← IO.mkRef (← now)
 
   let render (timestamp : Float) : IO Unit := do
@@ -126,8 +131,9 @@ def main : IO Unit := do
     else if key == "Enter" then
       event.preventDefault
       pendingInput.set none
-      state.set Snake.initialState
-      previousSnake.set Snake.initialState.snake
+      let initial ← makeInitialState
+      state.set initial
+      previousSnake.set initial.snake
       lastMoveTime.set (← now)
 
   _ ← setInterval Snake.moveIntervalMilliseconds do
