@@ -1,6 +1,6 @@
 name = "lean_snake"
 version = "0.1.0"
-defaultTargets = ["snake", "Proofs", "Tests"]
+defaultTargets = ["snake", "Proofs", "Tests", "ProofSupport", "GameFlowTests"]
 
 [[require]]
 name = "plausible"
@@ -12,6 +12,15 @@ name = "Snake"
 
 [[lean_lib]]
 name = "Spec"
+
+[[lean_lib]]
+name = "GameFlow"
+
+[[lean_lib]]
+name = "ProofSupport"
+
+[[lean_lib]]
+name = "GameFlowTests"
 
 [[lean_lib]]
 name = "Proofs"

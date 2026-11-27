@@ -5,7 +5,7 @@ namespace Snake
 open Spec
 
 def initialSnake : Spec.Snake :=
-  { position := { x := 7, y := 4 }, body := [] }
+  { head := { x := 7, y := 4 }, body := [], direction := .right }
 
 def playArea : PlayArea :=
   { leftEdge := 0, rightEdge := 29, topEdge := 0, bottomEdge := 19 }
@@ -45,86 +45,52 @@ def positionAfterMove (area : PlayArea) (direction : Direction) (position : Posi
         y := if position.y = area.bottomEdge then area.topEdge else position.y + 1 }
 
 def isFreeForSnake (position : Position) (snake : Spec.Snake) : Bool :=
-  decide (position ≠ snake.position ∧ position ∉ snake.body)
+  decide (position ≠ snake.head ∧ position ∉ snake.body)
 
 def freeFoodPositions (area : PlayArea) (snake : Spec.Snake) : List Position :=
-  (Spec.positionsInPlayArea area).filter (isFreeForSnake · snake)
+  let positions := (List.range (area.bottomEdge + 1 - area.topEdge)).flatMap fun y =>
+    (List.range (area.rightEdge + 1 - area.leftEdge)).map fun x =>
+      { x := area.leftEdge + x, y := area.topEdge + y : Position }
+  positions.filter (isFreeForSnake · snake)
 
-def nextFoodPosition (area : PlayArea) (random : Nat) (snake : Spec.Snake) :
-    Option Position :=
-  let positions := freeFoodPositions area snake
-  positions[random % positions.length]?
+def nextFoodPosition (area : PlayArea) (snake : Spec.Snake) : BaseIO (Option Position) :=
+  Spec.randomPosition (freeFoodPositions area snake)
 
-def initialState (random : Nat) : GameState :=
-  let food := (nextFoodPosition playArea random initialSnake).getD initialSnake.position
+def initialState (food : Position) : GameState :=
   { snake := initialSnake,
     food := food,
-    direction := .right,
-    phase := .playing,
-    random := random }
-
-def differentFoodPosition (area : PlayArea) (food : Position) : Position :=
-  let positions := Spec.positionsInPlayArea area
-  (positions.find? (fun position =>
-        decide (position.x ≠ food.x ∧ position.y ≠ food.y)) <|>
-      positions.find? (fun position => decide (position ≠ food))).getD
-    { x := area.leftEdge, y := area.topEdge }
+    phase := .playing }
 
 def snakeFillsPlayArea (area : PlayArea) (snake : Spec.Snake) : Bool :=
-  (Spec.positionsInPlayArea area).all fun position =>
-    decide (position = snake.position ∨ position ∈ snake.body)
+  (freeFoodPositions area snake).isEmpty
 
-def snakeAfterEating (input : Option PlayerInput) (state : GameState) : Spec.Snake :=
-  let direction := directionAfterInput input state.direction
-  { position := positionAfterMove playArea direction state.snake.position,
-    body := state.snake.position :: state.snake.body }
-
-def numberOfFreePositionsForStep (input : Option PlayerInput) (state : GameState) : Nat :=
-  let direction := directionAfterInput input state.direction
-  let intendedPosition := positionAfterMove playArea direction state.snake.position
+def moveSnake (input : Option PlayerInput) (state : GameState) : Spec.Snake :=
+  let direction := directionAfterInput input state.snake.direction
+  let position := positionAfterMove playArea direction state.snake.head
   let body :=
-    if intendedPosition = state.food then
-      state.snake.position :: state.snake.body
+    if position = state.food then
+      state.snake.head :: state.snake.body
     else if state.snake.body.isEmpty then
       []
     else
-      state.snake.position :: state.snake.body.dropLast
-  Spec.numberOfFreePositions playArea { position := intendedPosition, body := body }
+      state.snake.head :: state.snake.body.dropLast
+  { head := position, body := body, direction := direction }
 
-def step (input : Option PlayerInput) (state : GameState) : GameState :=
+def updateGame (state : GameState) (snake : Spec.Snake)
+    (nextFood : Option Position) : GameState :=
   if state.phase ≠ .playing then
     state
+  else if snake.head ∈ snake.body then
+    { state with snake := snake, phase := .lost }
+  else if snake.head = state.food then
+    match nextFood with
+    | some food =>
+      { state with snake := snake, food := food }
+    | none =>
+      { state with snake := snake, phase := .won }
   else
-    let direction := directionAfterInput input state.direction
-    let intendedPosition := positionAfterMove playArea direction state.snake.position
-    let eating := intendedPosition = state.food
-    let body :=
-      if eating then
-        state.snake.position :: state.snake.body
-      else if state.snake.body.isEmpty then
-        []
-      else
-        state.snake.position :: state.snake.body.dropLast
-    let snake := { position := intendedPosition, body := body }
-    if intendedPosition ∈ state.snake.body then
-      { state with
-        snake := snake,
-        food := if eating then
-          (nextFoodPosition playArea state.random snake).getD
-            (differentFoodPosition playArea state.food)
-          else state.food,
-        direction := direction,
-        phase := .lost }
-    else if eating then
-      match nextFoodPosition playArea state.random snake with
-      | some food =>
-        { state with snake := snake, food := food, direction := direction }
-      | none =>
-        { state with snake := snake, direction := direction, phase := .won }
-    else
-      { state with
-        snake := snake,
-        direction := direction,
-        phase := if snakeFillsPlayArea playArea snake then .won else .playing }
+    { state with
+      snake := snake,
+      phase := if snakeFillsPlayArea playArea snake then .won else .playing }
 
 end Snake

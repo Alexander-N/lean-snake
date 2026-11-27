@@ -1,4 +1,5 @@
 import Lasm.Web
+import GameFlow
 import Snake
 open Lasm.Web
 open Spec
@@ -15,9 +16,11 @@ def main : IO Unit := do
   IO.setRandSeed (← now).toUInt64.toNat
 
   let makeInitialState : IO GameState := do
-    let positionCount := Spec.numberOfFreePositions Snake.playArea Snake.initialSnake
-    let random ← IO.rand 0 (positionCount - 1)
-    pure (Snake.initialState random)
+    let initial ← GameFlow.initialStateWithRandomFood Snake.initialSnake Snake.initialState
+      (Snake.nextFoodPosition Snake.playArea)
+    match initial with
+    | some state => pure state
+    | none => throw (IO.userError "Cannot start: the play area has no free food position")
   let initial ← makeInitialState
   let state ← IO.mkRef initial
   let pendingInput ← IO.mkRef (none : Option PlayerInput)
@@ -77,7 +80,7 @@ def main : IO Unit := do
       drawMovingSegment fromPosition toPosition
     for newSegment in current.snake.body.drop previous.body.length do
       drawMovingSegment newSegment newSegment
-    drawMovingSegment previous.position current.snake.position
+    drawMovingSegment previous.head current.snake.head
     context.draw #[
       .fillStyle "#ff5d5d",
       .fillRect (current.food.x.toFloat * cellSize)
@@ -140,12 +143,8 @@ def main : IO Unit := do
     let current ← state.get
     let input ← pendingInput.get
     pendingInput.set none
-    let numberOfFreePositions := Snake.numberOfFreePositionsForStep input current
-    let random ← if numberOfFreePositions = 0 then
-        pure 0
-      else
-        IO.rand 0 (numberOfFreePositions - 1)
-    let nextState := Snake.step input { current with random := random }
+    let nextState ← GameFlow.stepWithRandomFood Snake.moveSnake Snake.updateGame
+      (Snake.nextFoodPosition Snake.playArea) input current
     previousSnake.set current.snake
     state.set nextState
     lastMoveTime.set (← now)
